@@ -1,6 +1,4 @@
-package com.zzypiper;
-
-import com.zzypiper.module.ToolException;
+package com.zzypiper.tool;
 
 import java.util.HashMap;
 import java.util.Map;

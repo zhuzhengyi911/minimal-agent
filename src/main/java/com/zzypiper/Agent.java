@@ -1,10 +1,26 @@
 package com.zzypiper;
 
-import com.zzypiper.module.*;
+import com.zzypiper.api.ApiRequest;
+import com.zzypiper.api.AssistantEvent;
+import com.zzypiper.hook.HookResult;
+import com.zzypiper.hook.HookRunner;
+import com.zzypiper.api.ApiClient;
+import com.zzypiper.permission.Outcome;
+import com.zzypiper.permission.PermissionPolicy;
+import com.zzypiper.session.ContentBlock;
+import com.zzypiper.session.KindEnum;
+import com.zzypiper.session.Message;
+import com.zzypiper.session.Session;
+import com.zzypiper.session.TurnSummary;
+import com.zzypiper.tool.ToolDefinition;
+import com.zzypiper.tool.ToolException;
+import com.zzypiper.tool.ToolExecutor;
+import com.zzypiper.tool.ToolRegistry;
 import lombok.Getter;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -15,8 +31,14 @@ public class Agent {
     private final ToolExecutor toolExecutor;
     private final PermissionPolicy permissionPolicy;
     private final List<String> systemPrompt;
+    private final List<ToolDefinition> toolDefinitions;  // legacy: null when toolRegistry is used
+    private final ToolRegistry toolRegistry;              // nullable: preferred over toolDefinitions
     private final int maxIterations;
     private final HookRunner hookRunner;
+
+    // -------------------------------------------------------------------------
+    // 传统构造器（保持向后兼容）
+    // -------------------------------------------------------------------------
 
     public Agent(Session session,
                  ApiClient apiClient,
@@ -24,14 +46,8 @@ public class Agent {
                  PermissionPolicy permissionPolicy,
                  List<String> systemPrompt
     ) {
-        this(session,
-                apiClient,
-                toolExecutor,
-                permissionPolicy,
-                systemPrompt,
-                Integer.MAX_VALUE,
-                new HookRunner(Arrays.asList(), Arrays.asList())
-        );
+        this(session, apiClient, toolExecutor, permissionPolicy, systemPrompt,
+                Collections.emptyList(), Integer.MAX_VALUE, new HookRunner(Arrays.asList(), Arrays.asList()));
     }
 
     public Agent(Session session,
@@ -39,6 +55,18 @@ public class Agent {
                  ToolExecutor toolExecutor,
                  PermissionPolicy permissionPolicy,
                  List<String> systemPrompt,
+                 List<ToolDefinition> toolDefinitions
+    ) {
+        this(session, apiClient, toolExecutor, permissionPolicy, systemPrompt,
+                toolDefinitions, Integer.MAX_VALUE, new HookRunner(Arrays.asList(), Arrays.asList()));
+    }
+
+    public Agent(Session session,
+                 ApiClient apiClient,
+                 ToolExecutor toolExecutor,
+                 PermissionPolicy permissionPolicy,
+                 List<String> systemPrompt,
+                 List<ToolDefinition> toolDefinitions,
                  int maxIterations,
                  HookRunner hookRunner
     ) {
@@ -47,32 +75,79 @@ public class Agent {
         this.toolExecutor = toolExecutor;
         this.permissionPolicy = permissionPolicy;
         this.systemPrompt = systemPrompt;
+        this.toolDefinitions = toolDefinitions;
+        this.toolRegistry = null;
+        this.maxIterations = maxIterations;
+        this.hookRunner = hookRunner;
+    }
+
+    // -------------------------------------------------------------------------
+    // 新构造器：使用 ToolRegistry，工具列表按权限模式动态计算
+    // -------------------------------------------------------------------------
+
+    /**
+     * 推荐构造器：通过 {@link ToolRegistry} 管理工具，权限过滤在每次 turn 开始时动态执行。
+     *
+     * <p>{@code permissionPolicy} 应使用带注册表的
+     * {@link com.zzypiper.permission.PermissionPolicy#PermissionPolicy(com.zzypiper.permission.ModeEnum, ToolRegistry)}
+     * 构造器，以启用 spec-based 精确权限校验。
+     */
+    public Agent(Session session,
+                 ApiClient apiClient,
+                 ToolExecutor toolExecutor,
+                 PermissionPolicy permissionPolicy,
+                 List<String> systemPrompt,
+                 ToolRegistry toolRegistry
+    ) {
+        this(session, apiClient, toolExecutor, permissionPolicy, systemPrompt,
+                toolRegistry, Integer.MAX_VALUE, new HookRunner(Arrays.asList(), Arrays.asList()));
+    }
+
+    public Agent(Session session,
+                 ApiClient apiClient,
+                 ToolExecutor toolExecutor,
+                 PermissionPolicy permissionPolicy,
+                 List<String> systemPrompt,
+                 ToolRegistry toolRegistry,
+                 int maxIterations,
+                 HookRunner hookRunner
+    ) {
+        this.session = session;
+        this.apiClient = apiClient;
+        this.toolExecutor = toolExecutor;
+        this.permissionPolicy = permissionPolicy;
+        this.systemPrompt = systemPrompt;
+        this.toolDefinitions = null;
+        this.toolRegistry = toolRegistry;
         this.maxIterations = maxIterations;
         this.hookRunner = hookRunner;
     }
 
     public TurnSummary runTurn(String userInput) {
-        // 1.添加用户消息到会话
         session.addMessage(Message.userText(userInput));
 
         List<Message> assistantMessages = new ArrayList<>();
         List<Message> toolResults = new ArrayList<>();
         int iterations = 0;
 
+        // 动态计算本次 turn 可用的工具定义：
+        // - 有 ToolRegistry 时按当前权限模式过滤；
+        // - 无 ToolRegistry 时沿用构造器传入的静态列表（兼容旧用法）。
+        List<ToolDefinition> effectiveDefinitions = toolRegistry != null
+                ? toolRegistry.getDefinitions(permissionPolicy.getMode())
+                : (toolDefinitions != null ? toolDefinitions : Collections.emptyList());
+
         while (true) {
             iterations++;
 
-            // 2.检查迭代上限
             if (iterations > maxIterations) {
                 throw new RuntimeException("conversation loop exceeded the maximum number of iterations: " + maxIterations);
             }
 
-            // 3.调用LLM API
             List<AssistantEvent> events = apiClient.stream(
-                    systemPrompt, session.getMessages()
+                    ApiRequest.of(systemPrompt, session.getMessages(), effectiveDefinitions)
             );
 
-            // 4.解析助手消息
             Message assistantMessage = buildAssistantMessage(events);
 
             List<ContentBlock> pendingToolUse = assistantMessage.getBlocks().stream()
@@ -82,59 +157,49 @@ public class Agent {
             session.addMessage(assistantMessage);
             assistantMessages.add(assistantMessage);
 
-            // 5.没有工具调用，循环结束
             if (pendingToolUse.isEmpty()) {
                 break;
             }
 
-            // 6.处理每个工具调用
             for (ContentBlock toolUseBlock : pendingToolUse) {
                 Message resultMessage = processToolUse(toolUseBlock);
                 session.addMessage(resultMessage);
                 toolResults.add(resultMessage);
             }
-
-            // 继续循环，把工具结果发给LLM，让它继续推理
         }
         return new TurnSummary(assistantMessages, toolResults, iterations);
     }
 
-    /**
-     * 从事件流里构建助手信息
-     * @param events
-     * @return
-     */
     private Message buildAssistantMessage(List<AssistantEvent> events) {
         StringBuilder currentText = new StringBuilder();
         List<ContentBlock> blocks = new ArrayList<>();
         boolean finished = false;
 
-        for(AssistantEvent event : events){
-            if (event instanceof AssistantEvent.TextDelta delta){
+        for (AssistantEvent event : events) {
+            if (event instanceof AssistantEvent.TextDelta delta) {
                 currentText.append(delta.delta());
-            } else if (event instanceof AssistantEvent.ToolUse toolUse){
+            } else if (event instanceof AssistantEvent.ToolUse toolUse) {
                 flushTextBlock(currentText, blocks);
-                blocks.add(ContentBlock.toolUse(toolUse.id(),toolUse.name(),toolUse.input()));
-            } else if (event instanceof AssistantEvent.MessageStop){
+                blocks.add(ContentBlock.toolUse(toolUse.id(), toolUse.name(), toolUse.input()));
+            } else if (event instanceof AssistantEvent.MessageStop) {
                 finished = true;
             }
         }
 
-        flushTextBlock(currentText,blocks);
+        flushTextBlock(currentText, blocks);
 
-        if (!finished){
+        if (!finished) {
             throw new RuntimeException("assistant stream ended without a MessageStop event");
         }
-        if (blocks.isEmpty()){
+        if (blocks.isEmpty()) {
             throw new RuntimeException("assistant stream produced no content");
         }
 
         return Message.assistant(blocks);
     }
 
-    // 把积累的文本内容flush成一个textBlock
     private void flushTextBlock(StringBuilder text, List<ContentBlock> blocks) {
-        if (!text.isEmpty()){
+        if (!text.isEmpty()) {
             blocks.add(ContentBlock.text(text.toString()));
             text.setLength(0);
         }
@@ -145,13 +210,11 @@ public class Agent {
         String toolName = toolUseBlock.getToolName();
         String input = toolUseBlock.getToolInput();
 
-        // 权限校验
         Outcome permissionOutcome = permissionPolicy.authorize(toolName, input);
         if (permissionOutcome instanceof Outcome.Deny deny) {
             return Message.toolResult(toolUseId, toolName, deny.reason(), false);
         }
 
-        // preToolUse Hook
         HookResult preHookResult = hookRunner.runPreToolUse(toolName, input);
         if (preHookResult.isDenied()) {
             String denyMsg = preHookResult.getMessages().isEmpty()
@@ -160,7 +223,6 @@ public class Agent {
             return Message.toolResult(toolUseId, toolName, denyMsg, true);
         }
 
-        // 执行工具
         String output;
         boolean error;
         try {
@@ -172,7 +234,6 @@ public class Agent {
         }
         output = mergeHookFeedBack(preHookResult.getMessages(), output, false);
 
-        // postToolUse Hook
         HookResult postHookResult = hookRunner.runPostToolUse(toolName, input, output);
         if (postHookResult.isDenied()) {
             error = true;

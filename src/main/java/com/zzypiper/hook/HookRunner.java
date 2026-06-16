@@ -1,10 +1,7 @@
-package com.zzypiper;
+package com.zzypiper.hook;
 
-import com.zzypiper.module.HookDecision;
-import com.zzypiper.module.HookResult;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,18 +30,14 @@ public class HookRunner {
 
         for (Hook hook : hooks) {
             HookDecision decision = hook.run(toolName, input, output != null ? output : "");
-            switch (decision){
+            switch (decision) {
                 case ALLOW -> { /* 继续执行下一个Hook */ }
                 case DENY -> {
-                    // 一旦有Hook拒绝，立即返回，不再执行后续Hook
                     String denyMsg = "Hook denied tool '" + toolName + "'";
                     messages.add(denyMsg);
                     return HookResult.deny(denyMsg);
                 }
-                case WARN -> {
-                    // 记录告警，继续执行
-                    messages.add("Hook warning for tool '" + toolName + "'");
-                }
+                case WARN -> messages.add("Hook warning for tool '" + toolName + "'");
             }
         }
 

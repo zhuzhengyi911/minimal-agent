@@ -1,16 +1,46 @@
-package com.zzypiper;
+package com.zzypiper.permission;
 
-import com.zzypiper.module.ModeEnum;
-import com.zzypiper.module.Outcome;
+import com.zzypiper.tool.ToolRegistry;
+import com.zzypiper.tool.ToolSpec;
 
 public class PermissionPolicy {
     private final ModeEnum mode;
+    private final ToolRegistry registry;  // nullable — may be null for legacy usage
 
     public PermissionPolicy(ModeEnum mode) {
+        this(mode, null);
+    }
+
+    /**
+     * 带注册表的构造器，优先使用 {@link ToolSpec#requiredMode()} 做精确权限校验。
+     * 对注册表中没有的工具，回退到字符串启发式判断。
+     */
+    public PermissionPolicy(ModeEnum mode, ToolRegistry registry) {
         this.mode = mode;
+        this.registry = registry;
+    }
+
+    public ModeEnum getMode() {
+        return mode;
     }
 
     public Outcome authorize(String toolName, String input) {
+        // 优先走 spec-based 精确校验
+        if (registry != null) {
+            ToolSpec spec = registry.getSpec(toolName);
+            if (spec != null) {
+                if (spec.requiredMode().ordinal() <= mode.ordinal()) {
+                    return new Outcome.Allow();
+                } else {
+                    return new Outcome.Deny("tool '" + toolName + "' requires "
+                            + spec.requiredMode() + " but current mode is " + mode);
+                }
+            }
+            // 工具不在注册表中：安全兜底，拒绝执行
+            return new Outcome.Deny("tool '" + toolName + "' is not registered");
+        }
+
+        // 无注册表时回退到字符串启发式（兼容旧测试）
         return switch (mode) {
             case DANGER_FULL_ACCESS -> new Outcome.Allow();
             case WORKSPACE_WRITE -> {
@@ -29,7 +59,6 @@ public class PermissionPolicy {
     }
 
     private boolean isDangerousOnly(String toolName) {
-        // 简化逻辑：包含"danger"或"bash"就需要完全权限
         String lower = toolName.toLowerCase();
         return lower.contains("danger")
                 || lower.contains("delete")
@@ -37,7 +66,6 @@ public class PermissionPolicy {
     }
 
     private boolean isReadTool(String toolName) {
-        // 简化逻辑
         String lower = toolName.toLowerCase();
         return lower.contains("read")
                 || lower.contains("list")

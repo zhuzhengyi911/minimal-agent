@@ -1,6 +1,6 @@
-package com.zzypiper;
+package com.zzypiper.api;
 
-sealed interface AssistantEvent permits
+public sealed interface AssistantEvent permits
         AssistantEvent.TextDelta,
         AssistantEvent.ToolUse,
         AssistantEvent.MessageStop {

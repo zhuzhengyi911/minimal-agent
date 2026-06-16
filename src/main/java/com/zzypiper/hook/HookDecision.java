@@ -1,4 +1,4 @@
-package com.zzypiper.module;
+package com.zzypiper.hook;
 
 public enum HookDecision {
     ALLOW,

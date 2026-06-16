@@ -1,5 +1,4 @@
-package com.zzypiper.module;
-
+package com.zzypiper.session;
 
 public enum RoleEnum {
     USER,

@@ -1,18 +1,14 @@
-package com.zzypiper.module;
+package com.zzypiper.session;
 
 import lombok.Data;
 
 @Data
 public class ContentBlock {
-    // 类型
     private final KindEnum kind;
-    // TEXT块
     private final String text;
-    // TOOL_USE块
     private final String toolUseId;
     private final String toolName;
     private final String toolInput;
-    // TOOL_RESULT块
     private final String toolOutput;
     private final boolean error;
 
@@ -32,7 +28,7 @@ public class ContentBlock {
         );
     }
 
-    public static ContentBlock toolResult(String toolUseId, String toolName,String toolOutput, boolean error) {
+    public static ContentBlock toolResult(String toolUseId, String toolName, String toolOutput, boolean error) {
         return new ContentBlock(
                 KindEnum.TOOL_USE, null,
                 toolUseId, toolName, null,

@@ -1,6 +1,8 @@
-package com.zzypiper;
+package com.zzypiper.api.mock;
 
-import com.zzypiper.module.Message;
+import com.zzypiper.api.ApiClient;
+import com.zzypiper.api.ApiRequest;
+import com.zzypiper.api.AssistantEvent;
 import lombok.Getter;
 
 import java.util.ArrayDeque;
@@ -28,17 +30,17 @@ public class MockApiClient implements ApiClient {
 
     public MockApiClient thenToolUse(String toolUseId, String toolName, String input) {
         return thenReturn(Arrays.asList(
-                new AssistantEvent.ToolUse(toolUseId,toolName,input),
+                new AssistantEvent.ToolUse(toolUseId, toolName, input),
                 new AssistantEvent.MessageStop())
         );
     }
 
     @Override
-    public List<AssistantEvent> stream(List<String> systemPrompt, List<Message> messages) {
+    public List<AssistantEvent> stream(ApiRequest request) {
         callCount++;
         List<AssistantEvent> response = responses.poll();
-        if (response == null){
-            throw  new RuntimeException("MockApiClient: unexpected call #" + callCount + ", no more response");
+        if (response == null) {
+            throw new RuntimeException("MockApiClient: unexpected call #" + callCount + ", no more response");
         }
         return response;
     }

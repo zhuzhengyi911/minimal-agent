@@ -1,4 +1,4 @@
-package com.zzypiper.module;
+package com.zzypiper.permission;
 
 public enum ModeEnum {
     READ_ONLY,

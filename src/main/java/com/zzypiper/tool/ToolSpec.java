@@ -14,7 +14,7 @@ import com.zzypiper.permission.ModeEnum;
  *  │  注册层  ToolSpec        →  Agent 运行时内部持有              │
  *  │          name / description / inputSchemaJson / requiredMode │
  *  ├─────────────────────────────────────────────────────────────┤
- *  │  执行层  ToolExecutor    →  实际运行工具逻辑                   │
+ *  │  执行层  BuiltinTool 各实现类  →  实际运行工具逻辑               │
  *  └─────────────────────────────────────────────────────────────┘
  * </pre>
  *
@@ -36,7 +36,7 @@ import com.zzypiper.permission.ModeEnum;
  * <p>LLM 返回 tool_use → Agent 从注册表查找对应 {@code ToolSpec} →
  * 比较 {@code ToolSpec.requiredMode} 与当前 {@link com.zzypiper.permission.PermissionPolicy}
  * 的模式（{@code READ_ONLY < WORKSPACE_WRITE < DANGER_FULL_ACCESS}）→
- * 不足则拒绝执行，足够则放行给 {@link ToolExecutor}。
+ * 不足则拒绝执行，足够则放行给 {@link ToolRegistry} 中对应的 {@link ToolRegistry.ToolHandler}。
  *
  * <p>对应 Claude Code 源码参考：{@code rust/crates/tools/src/lib.rs}
  */

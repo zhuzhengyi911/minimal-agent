@@ -1,6 +1,6 @@
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.zzypiper.Agent;
+import com.zzypiper.agent.Agent;
 import com.zzypiper.api.mock.MockApiClient;
 import com.zzypiper.api.minimax.MinimaxApiClient;
 import com.zzypiper.permission.ModeEnum;
@@ -10,12 +10,11 @@ import com.zzypiper.session.KindEnum;
 import com.zzypiper.session.Message;
 import com.zzypiper.session.Session;
 import com.zzypiper.session.TurnSummary;
-import com.zzypiper.tool.StaticToolExecutor;
-import com.zzypiper.tool.ToolDefinition;
+import com.zzypiper.tool.ToolRegistry;
+import com.zzypiper.tool.ToolSpec;
 import org.junit.Test;
 
 import java.util.Arrays;
-import java.util.List;
 
 import static org.junit.Assert.*;
 
@@ -28,20 +27,23 @@ public class AgentTest {
                 .thenToolUse("tool-1", "add", "2,2")
                 .thenText("The answer is 4.");
 
-        StaticToolExecutor executor = new StaticToolExecutor()
-                .register("add", input -> {
+        ToolRegistry registry = new ToolRegistry();
+        registry.register(
+                new ToolSpec("add", "Add numbers", "{\"type\":\"object\",\"properties\":{}}", ModeEnum.WORKSPACE_WRITE),
+                input -> {
                     int sum = Arrays.stream(input.split(","))
                             .mapToInt(Integer::parseInt)
                             .sum();
                     return String.valueOf(sum);
-                });
+                }
+        );
 
         Agent agent = new Agent(
                 new Session(),
                 mockApi,
-                executor,
-                new PermissionPolicy(ModeEnum.WORKSPACE_WRITE),
-                Arrays.asList("You are a helpful assistant.")
+                new PermissionPolicy(ModeEnum.WORKSPACE_WRITE, registry),
+                Arrays.asList("You are a helpful assistant."),
+                registry
         );
 
         TurnSummary summary = agent.runTurn("what is 2 + 2?");
@@ -68,33 +70,31 @@ public class AgentTest {
 
         MinimaxApiClient client = new MinimaxApiClient(apiKey);
 
-        StaticToolExecutor executor = new StaticToolExecutor()
-                .register("add", input -> {
-                    JsonNode node;
-                    try {
-                        node = mapper.readTree(input);
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
-                    }
-                    int sum = node.get("a").asInt() + node.get("b").asInt();
-                    return String.valueOf(sum);
-                });
-
-        List<ToolDefinition> tools = Arrays.asList(
-                new ToolDefinition(
+        ToolRegistry registry = new ToolRegistry();
+        registry.register(
+                new ToolSpec(
                         "add",
                         "Add two integers and return the sum.",
-                        "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"]}"
-                )
+                        "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"]}",
+                        ModeEnum.WORKSPACE_WRITE
+                ),
+                input -> {
+                    try {
+                        JsonNode node = mapper.readTree(input);
+                        int sum = node.get("a").asInt() + node.get("b").asInt();
+                        return String.valueOf(sum);
+                    } catch (Exception e) {
+                        throw new com.zzypiper.tool.ToolException("add failed: " + e.getMessage());
+                    }
+                }
         );
 
         Agent agent = new Agent(
                 new Session(),
                 client,
-                executor,
-                new PermissionPolicy(ModeEnum.WORKSPACE_WRITE),
+                new PermissionPolicy(ModeEnum.WORKSPACE_WRITE, registry),
                 Arrays.asList("You are a helpful assistant. Use the add tool when asked to add numbers."),
-                tools
+                registry
         );
 
         TurnSummary summary = agent.runTurn("what is 2 + 2?");

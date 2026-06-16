@@ -36,8 +36,7 @@ public class ToolRegistry {
 
     /**
      * 工具执行逻辑的函数式接口。
-     * <p>与 {@link StaticToolExecutor.ToolHandler} 语义相同，
-     * 单独定义避免对 {@link StaticToolExecutor} 产生依赖。
+     * <p>注册时传入，由 {@link com.zzypiper.agent.Agent} 在执行工具调用时取出执行。
      */
     @FunctionalInterface
     public interface ToolHandler {

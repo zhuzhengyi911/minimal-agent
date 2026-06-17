@@ -7,7 +7,6 @@ import com.zzypiper.api.TurnUsage;
 import com.zzypiper.api.UsageTracker;
 import com.zzypiper.compaction.Compactor;
 import com.zzypiper.hook.HookResult;
-import com.zzypiper.hook.HookRunner;
 import com.zzypiper.memory.MemoryLoader;
 import com.zzypiper.api.ApiClient;
 import com.zzypiper.permission.Outcome;
@@ -23,7 +22,6 @@ import lombok.Getter;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -34,11 +32,9 @@ public class Agent {
     private final PermissionPolicy permissionPolicy;
     private final List<String> systemPrompt;
     private final ToolRegistry toolRegistry;
-    private final int maxIterations;
-    private final HookRunner hookRunner;
+    private final AgentOptions options;
     private final UsageTracker usageTracker = new UsageTracker();
     private final Compactor compactor;
-    private final MemoryLoader memoryLoader;
 
     public Agent(Session session,
                  ApiClient apiClient,
@@ -47,7 +43,7 @@ public class Agent {
                  ToolRegistry toolRegistry
     ) {
         this(session, apiClient, permissionPolicy, systemPrompt,
-                toolRegistry, Integer.MAX_VALUE, new HookRunner(Arrays.asList(), Arrays.asList()), null);
+                toolRegistry, AgentOptions.defaults());
     }
 
     public Agent(Session session,
@@ -55,31 +51,15 @@ public class Agent {
                  PermissionPolicy permissionPolicy,
                  List<String> systemPrompt,
                  ToolRegistry toolRegistry,
-                 int maxIterations,
-                 HookRunner hookRunner
-    ) {
-        this(session, apiClient, permissionPolicy, systemPrompt,
-                toolRegistry, maxIterations, hookRunner, null);
-    }
-
-    public Agent(Session session,
-                 ApiClient apiClient,
-                 PermissionPolicy permissionPolicy,
-                 List<String> systemPrompt,
-                 ToolRegistry toolRegistry,
-                 int maxIterations,
-                 HookRunner hookRunner,
-                 MemoryLoader memoryLoader
+                 AgentOptions options
     ) {
         this.session = session;
         this.apiClient = apiClient;
         this.permissionPolicy = permissionPolicy;
         this.systemPrompt = systemPrompt;
         this.toolRegistry = toolRegistry;
-        this.maxIterations = maxIterations;
-        this.hookRunner = hookRunner;
+        this.options = options;
         this.compactor = new Compactor(apiClient);
-        this.memoryLoader = memoryLoader;
     }
 
     public TurnSummary runTurn(String userInput) {
@@ -107,8 +87,8 @@ public class Agent {
 
         while (true) {
             iterations++;
-            if (iterations > maxIterations) {
-                throw new RuntimeException("conversation loop exceeded the maximum number of iterations: " + maxIterations);
+            if (iterations > options.maxIterations()) {
+                throw new RuntimeException("conversation loop exceeded the maximum number of iterations: " + options.maxIterations());
             }
 
             List<AssistantEvent> events = apiClient.stream(ApiRequest.of(effectivePrompt, session.getMessages(), tools));
@@ -141,12 +121,12 @@ public class Agent {
      * = baseSystemPrompt + 记忆使用指令（如有 MemoryLoader）+ 最新记忆索引（如非空）
      */
     private List<String> buildEffectivePrompt() {
-        if (memoryLoader == null) {
+        if (options.memoryLoader() == null) {
             return systemPrompt;
         }
         List<String> effective = new ArrayList<>(systemPrompt);
         effective.add(MemoryLoader.USAGE_INSTRUCTIONS);
-        String memoryIndex = memoryLoader.load();
+        String memoryIndex = options.memoryLoader().load();
         if (!memoryIndex.isBlank()) {
             effective.add("## Current Memory Index\n\n" + memoryIndex);
         }
@@ -212,7 +192,7 @@ public class Agent {
             return Message.toolResult(toolUseId, toolName, deny.reason(), false);
         }
 
-        HookResult preHookResult = hookRunner.runPreToolUse(toolName, input);
+        HookResult preHookResult = options.hookRunner().runPreToolUse(toolName, input);
         if (preHookResult.isDenied()) {
             String denyMsg = preHookResult.getMessages().isEmpty()
                     ? "PreToolUse hook denied tool '" + toolName + "'"
@@ -235,7 +215,7 @@ public class Agent {
         }
         output = mergeHookFeedBack(preHookResult.getMessages(), output, false);
 
-        HookResult postHookResult = hookRunner.runPostToolUse(toolName, input, output);
+        HookResult postHookResult = options.hookRunner().runPostToolUse(toolName, input, output);
         if (postHookResult.isDenied()) {
             error = true;
         }

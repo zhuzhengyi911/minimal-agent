@@ -1,4 +1,4 @@
-package com.zzypiper.agent;
+package com.zzypiper.api;
 
 import com.zzypiper.api.ModelConfig;
 import com.zzypiper.api.TokenUsage;

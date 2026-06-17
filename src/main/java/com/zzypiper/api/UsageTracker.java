@@ -3,6 +3,7 @@ package com.zzypiper.api;
 import com.zzypiper.api.ModelConfig;
 import com.zzypiper.api.TokenUsage;
 import com.zzypiper.api.TurnUsage;
+import com.zzypiper.compaction.CompactionUsage;
 import com.zzypiper.session.ContentBlock;
 import com.zzypiper.session.Message;
 import com.zzypiper.tool.ToolDefinition;
@@ -30,6 +31,9 @@ public class UsageTracker {
     private final List<TurnUsage> turns = new ArrayList<>();
     private TokenUsage cumulative = TokenUsage.ZERO;
 
+    private final List<CompactionUsage> compactions = new ArrayList<>();
+    private TokenUsage compactionOverhead = TokenUsage.ZERO;
+
     // -------------------------------------------------------------------------
     // 写入
     // -------------------------------------------------------------------------
@@ -37,6 +41,11 @@ public class UsageTracker {
     public void record(TurnUsage turn) {
         turns.add(turn);
         cumulative = cumulative.plus(turn.actual());
+    }
+
+    public void recordCompaction(CompactionUsage cu) {
+        compactions.add(cu);
+        compactionOverhead = compactionOverhead.plus(cu.actual());
     }
 
     // -------------------------------------------------------------------------
@@ -55,16 +64,36 @@ public class UsageTracker {
         return Collections.unmodifiableList(turns);
     }
 
+    public List<CompactionUsage> compactions() {
+        return Collections.unmodifiableList(compactions);
+    }
+
+    public TokenUsage compactionOverhead() {
+        return compactionOverhead;
+    }
+
     // -------------------------------------------------------------------------
     // 压缩判断
     // -------------------------------------------------------------------------
 
     /**
-     * 判断是否需要在下次 API 调用前压缩上下文。
+     * 判断给定的估算 token 数是否超过可用输入空间阈值。
      *
      * <p>可用输入空间 = contextWindow - maxOutputTokens - safetyBuffer<br>
-     * 参考值为上一轮实际 {@code inputTokens}（来自 API 响应，最准确）。
+     * 供调用方在每次 API 调用前用当前 session 的估算值做实时判断。
      */
+    public static boolean exceedsThreshold(int estimatedTokens, ModelConfig config) {
+        int available = config.contextWindow() - config.maxOutputTokens() - SAFETY_BUFFER;
+        return estimatedTokens > available;
+    }
+
+    /**
+     * 基于上一轮实际 {@code inputTokens} 判断是否需要压缩（滞后一轮的快照）。
+     *
+     * @deprecated 优先使用 {@link #exceedsThreshold(int, ModelConfig)} 配合当前估算值做实时判断；
+     *             此方法保留用于审计和偏差分析。
+     */
+    @Deprecated
     public boolean needsCompaction(ModelConfig config) {
         if (turns.isEmpty()) return false;
         int available = config.contextWindow() - config.maxOutputTokens() - SAFETY_BUFFER;

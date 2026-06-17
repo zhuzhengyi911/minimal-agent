@@ -5,6 +5,7 @@ import com.zzypiper.api.AssistantEvent;
 import com.zzypiper.api.TokenUsage;
 import com.zzypiper.api.TurnUsage;
 import com.zzypiper.api.UsageTracker;
+import com.zzypiper.compaction.Compactor;
 import com.zzypiper.hook.HookResult;
 import com.zzypiper.hook.HookRunner;
 import com.zzypiper.api.ApiClient;
@@ -35,6 +36,7 @@ public class Agent {
     private final int maxIterations;
     private final HookRunner hookRunner;
     private final UsageTracker usageTracker = new UsageTracker();
+    private final Compactor compactor;
 
     public Agent(Session session,
                  ApiClient apiClient,
@@ -61,6 +63,7 @@ public class Agent {
         this.toolRegistry = toolRegistry;
         this.maxIterations = maxIterations;
         this.hookRunner = hookRunner;
+        this.compactor = new Compactor(apiClient);
     }
 
     public TurnSummary runTurn(String userInput) {
@@ -68,7 +71,15 @@ public class Agent {
         session.addMessage(Message.userText(userInput));
 
         List<com.zzypiper.tool.ToolDefinition> tools = toolRegistry.getDefinitions(permissionPolicy.getMode());
+
+        // 用当前 session 的估算值实时判断是否需要压缩，比依赖上一轮 actual 更准确
         int estimatedTokens = UsageTracker.estimateInputTokens(systemPrompt, session.getMessages(), tools);
+        if (UsageTracker.exceedsThreshold(estimatedTokens, apiClient.getModelConfig())) {
+            compactor.compact(session, systemPrompt)
+                     .ifPresent(usageTracker::recordCompaction);
+            // 压缩后消息减少，重新估算以准确记录本轮实际起点
+            estimatedTokens = UsageTracker.estimateInputTokens(systemPrompt, session.getMessages(), tools);
+        }
 
         List<Message> assistantMessages = new ArrayList<>();
         List<Message> toolResults = new ArrayList<>();

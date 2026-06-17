@@ -1,3 +1,5 @@
+package com.zzypiper.mcp;
+
 import com.zzypiper.agent.Agent;
 import com.zzypiper.api.minimax.MinimaxApiClient;
 import com.zzypiper.cli.AgentBootstrap;

@@ -1,6 +1,7 @@
+package com.zzypiper.agent;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.zzypiper.agent.Agent;
 import com.zzypiper.api.mock.MockApiClient;
 import com.zzypiper.api.minimax.MinimaxApiClient;
 import com.zzypiper.permission.ModeEnum;

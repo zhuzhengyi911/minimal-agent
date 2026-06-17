@@ -2,6 +2,8 @@ package com.zzypiper.agent;
 
 import com.zzypiper.api.ApiRequest;
 import com.zzypiper.api.AssistantEvent;
+import com.zzypiper.api.TokenUsage;
+import com.zzypiper.api.TurnUsage;
 import com.zzypiper.hook.HookResult;
 import com.zzypiper.hook.HookRunner;
 import com.zzypiper.api.ApiClient;
@@ -30,6 +32,7 @@ public class Agent {
     private final ToolRegistry toolRegistry;
     private final int maxIterations;
     private final HookRunner hookRunner;
+    private final UsageTracker usageTracker = new UsageTracker();
 
     public Agent(Session session,
                  ApiClient apiClient,
@@ -68,6 +71,13 @@ public class Agent {
         List<com.zzypiper.tool.ToolDefinition> effectiveDefinitions =
                 toolRegistry.getDefinitions(permissionPolicy.getMode());
 
+        // 调用前估算 input token 数（含系统提示、消息历史、工具 schema）
+        int estimatedTokens = UsageTracker.estimateInputTokens(
+                systemPrompt, session.getMessages(), effectiveDefinitions);
+
+        // 本 turn 内多次迭代的用量累计
+        TokenUsage turnUsage = TokenUsage.ZERO;
+
         while (true) {
             iterations++;
 
@@ -78,6 +88,14 @@ public class Agent {
             List<AssistantEvent> events = apiClient.stream(
                     ApiRequest.of(systemPrompt, session.getMessages(), effectiveDefinitions)
             );
+
+            // 从事件流中提取本次迭代的 token 用量
+            TokenUsage iterUsage = events.stream()
+                    .filter(e -> e instanceof AssistantEvent.Usage)
+                    .map(e -> ((AssistantEvent.Usage) e).usage())
+                    .findFirst()
+                    .orElse(TokenUsage.ZERO);
+            turnUsage = turnUsage.plus(iterUsage);
 
             Message assistantMessage = buildAssistantMessage(events);
 
@@ -98,6 +116,11 @@ public class Agent {
                 toolResults.add(resultMessage);
             }
         }
+
+        // 记录本 turn 的用量
+        usageTracker.record(new TurnUsage(
+                usageTracker.turns().size(), iterations, estimatedTokens, turnUsage));
+
         return new TurnSummary(assistantMessages, toolResults, iterations);
     }
 

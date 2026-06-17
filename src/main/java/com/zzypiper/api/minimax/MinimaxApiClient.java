@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.zzypiper.api.ApiClient;
 import com.zzypiper.api.ApiRequest;
 import com.zzypiper.api.AssistantEvent;
+import com.zzypiper.api.ModelConfig;
+import com.zzypiper.api.TokenUsage;
 import com.zzypiper.session.ContentBlock;
 import com.zzypiper.session.Message;
 import com.zzypiper.session.RoleEnum;
@@ -23,6 +25,17 @@ public class MinimaxApiClient implements ApiClient {
 
     private static final String API_URL = "https://api.minimaxi.com/anthropic/v1/messages";
     private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    // MiniMax-M3 定价参考（$/MTok），如官方更新请同步修改
+    private static final ModelConfig MINIMAX_M3_CONFIG = new ModelConfig(
+            "MiniMax-M3",
+            200_000,   // context window
+            4_096,     // max output tokens
+            1.0,       // input  $/MTok（占位，请以官方为准）
+            5.0,       // output $/MTok
+            1.25,      // cache write $/MTok
+            0.10       // cache read  $/MTok
+    );
 
     private final String apiKey;
     private final String model;
@@ -134,6 +147,11 @@ public class MinimaxApiClient implements ApiClient {
         return msgNode;
     }
 
+    @Override
+    public ModelConfig getModelConfig() {
+        return MINIMAX_M3_CONFIG;
+    }
+
     private List<AssistantEvent> parseResponse(String responseBody) throws Exception {
         List<AssistantEvent> events = new ArrayList<>();
         JsonNode root = MAPPER.readTree(responseBody);
@@ -154,6 +172,15 @@ public class MinimaxApiClient implements ApiClient {
             }
         }
 
+        // 解析 token 用量，作为 Usage 事件附在末尾
+        JsonNode usageNode = root.path("usage");
+        TokenUsage usage = new TokenUsage(
+                usageNode.path("input_tokens").asInt(),
+                usageNode.path("output_tokens").asInt(),
+                usageNode.path("cache_creation_input_tokens").asInt(),
+                usageNode.path("cache_read_input_tokens").asInt()
+        );
+        events.add(new AssistantEvent.Usage(usage));
         events.add(new AssistantEvent.MessageStop());
         return events;
     }

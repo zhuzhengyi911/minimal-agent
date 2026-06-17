@@ -3,6 +3,7 @@ package com.zzypiper.api.mock;
 import com.zzypiper.api.ApiClient;
 import com.zzypiper.api.ApiRequest;
 import com.zzypiper.api.AssistantEvent;
+import com.zzypiper.api.ModelConfig;
 import lombok.Getter;
 
 import java.util.ArrayDeque;
@@ -12,6 +13,10 @@ import java.util.List;
 
 @Getter
 public class MockApiClient implements ApiClient {
+
+    /** 测试用默认模型配置，上下文窗口设得足够大以避免测试中触发压缩。 */
+    public static final ModelConfig DEFAULT_MODEL_CONFIG = new ModelConfig(
+            "mock-model", 200_000, 4_096, 0, 0, 0, 0);
 
     private final Deque<List<AssistantEvent>> responses = new ArrayDeque<>();
     private int callCount = 0;
@@ -33,6 +38,11 @@ public class MockApiClient implements ApiClient {
                 new AssistantEvent.ToolUse(toolUseId, toolName, input),
                 new AssistantEvent.MessageStop())
         );
+    }
+
+    @Override
+    public ModelConfig getModelConfig() {
+        return DEFAULT_MODEL_CONFIG;
     }
 
     @Override

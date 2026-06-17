@@ -1,0 +1,11 @@
+{
+  "servers": [
+    {
+      "name": "weather",
+      "type": "stdio",
+      "command": "python3",
+      "args": ["demo/weather-mcp-server/weather_server.py"],
+      "env": {}
+    }
+  ]
+}

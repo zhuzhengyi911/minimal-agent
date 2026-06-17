@@ -7,13 +7,16 @@ import com.zzypiper.api.minimax.MinimaxApiClient;
 import com.zzypiper.mcp.McpManager;
 import com.zzypiper.mcp.McpServerConfig;
 import com.zzypiper.mcp.TransportType;
+import com.zzypiper.memory.MemoryLoader;
 import com.zzypiper.tool.ToolRegistry;
 import com.zzypiper.tool.builtin.BashTool;
 import com.zzypiper.tool.builtin.EditFileTool;
 import com.zzypiper.tool.builtin.GlobTool;
 import com.zzypiper.tool.builtin.GrepTool;
 import com.zzypiper.tool.builtin.ReadFileTool;
+import com.zzypiper.tool.builtin.ReadMemoryTool;
 import com.zzypiper.tool.builtin.WriteFileTool;
+import com.zzypiper.tool.builtin.WriteMemoryTool;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -63,13 +66,16 @@ public class AgentBootstrap {
      * 完整启动：读取配置、创建 ApiClient、注册工具、初始化 MCP。
      */
     public static BuildResult build(Path workDir) {
+        MemoryLoader memoryLoader = new MemoryLoader(workDir);
+
         ToolRegistry registry = new ToolRegistry();
         registerBuiltinTools(registry);
+        registerMemoryTools(registry, memoryLoader);
 
         McpManager mcpManager = initMcp(registry, workDir);
         ApiClient apiClient = loadApiClient(workDir);
 
-        return new BuildResult(registry, mcpManager, apiClient);
+        return new BuildResult(registry, mcpManager, apiClient, memoryLoader);
     }
 
     /** 仅构建内置工具注册表（不加载 MCP 和 API 配置），供测试或简单场景使用。 */
@@ -143,6 +149,13 @@ public class AgentBootstrap {
         ).forEach(tool -> registry.register(tool.spec(), tool::execute));
     }
 
+    private static void registerMemoryTools(ToolRegistry registry, MemoryLoader memoryLoader) {
+        WriteMemoryTool writeTool = new WriteMemoryTool(memoryLoader);
+        ReadMemoryTool  readTool  = new ReadMemoryTool(memoryLoader);
+        registry.register(writeTool.spec(), writeTool::execute);
+        registry.register(readTool.spec(),  readTool::execute);
+    }
+
     // -------------------------------------------------------------------------
     // MCP 初始化
     // -------------------------------------------------------------------------
@@ -201,9 +214,9 @@ public class AgentBootstrap {
     // -------------------------------------------------------------------------
 
     /**
-     * {@link #build(Path)} 的返回值，持有完整初始化的工具注册表、MCP 管理器和 API 客户端。
+     * {@link #build(Path)} 的返回值，持有完整初始化的工具注册表、MCP 管理器、API 客户端和记忆加载器。
      */
-    public record BuildResult(ToolRegistry registry, McpManager mcpManager, ApiClient apiClient) {
+    public record BuildResult(ToolRegistry registry, McpManager mcpManager, ApiClient apiClient, MemoryLoader memoryLoader) {
         /** 释放所有 MCP server 资源。如果没有 MCP，此方法为空操作。 */
         public void shutdown() {
             if (mcpManager != null) {

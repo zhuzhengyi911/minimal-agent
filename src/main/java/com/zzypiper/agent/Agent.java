@@ -8,6 +8,7 @@ import com.zzypiper.api.UsageTracker;
 import com.zzypiper.compaction.Compactor;
 import com.zzypiper.hook.HookResult;
 import com.zzypiper.hook.HookRunner;
+import com.zzypiper.memory.MemoryLoader;
 import com.zzypiper.api.ApiClient;
 import com.zzypiper.permission.Outcome;
 import com.zzypiper.permission.PermissionPolicy;
@@ -37,6 +38,7 @@ public class Agent {
     private final HookRunner hookRunner;
     private final UsageTracker usageTracker = new UsageTracker();
     private final Compactor compactor;
+    private final MemoryLoader memoryLoader;
 
     public Agent(Session session,
                  ApiClient apiClient,
@@ -45,7 +47,7 @@ public class Agent {
                  ToolRegistry toolRegistry
     ) {
         this(session, apiClient, permissionPolicy, systemPrompt,
-                toolRegistry, Integer.MAX_VALUE, new HookRunner(Arrays.asList(), Arrays.asList()));
+                toolRegistry, Integer.MAX_VALUE, new HookRunner(Arrays.asList(), Arrays.asList()), null);
     }
 
     public Agent(Session session,
@@ -56,6 +58,19 @@ public class Agent {
                  int maxIterations,
                  HookRunner hookRunner
     ) {
+        this(session, apiClient, permissionPolicy, systemPrompt,
+                toolRegistry, maxIterations, hookRunner, null);
+    }
+
+    public Agent(Session session,
+                 ApiClient apiClient,
+                 PermissionPolicy permissionPolicy,
+                 List<String> systemPrompt,
+                 ToolRegistry toolRegistry,
+                 int maxIterations,
+                 HookRunner hookRunner,
+                 MemoryLoader memoryLoader
+    ) {
         this.session = session;
         this.apiClient = apiClient;
         this.permissionPolicy = permissionPolicy;
@@ -64,6 +79,7 @@ public class Agent {
         this.maxIterations = maxIterations;
         this.hookRunner = hookRunner;
         this.compactor = new Compactor(apiClient);
+        this.memoryLoader = memoryLoader;
     }
 
     public TurnSummary runTurn(String userInput) {
@@ -72,13 +88,16 @@ public class Agent {
 
         List<com.zzypiper.tool.ToolDefinition> tools = toolRegistry.getDefinitions(permissionPolicy.getMode());
 
+        // 每个 turn 动态拼装 system prompt：base + 记忆使用指令 + 最新记忆索引
+        List<String> effectivePrompt = buildEffectivePrompt();
+
         // 用当前 session 的估算值实时判断是否需要压缩，比依赖上一轮 actual 更准确
-        int estimatedTokens = UsageTracker.estimateInputTokens(systemPrompt, session.getMessages(), tools);
+        int estimatedTokens = UsageTracker.estimateInputTokens(effectivePrompt, session.getMessages(), tools);
         if (UsageTracker.exceedsThreshold(estimatedTokens, apiClient.getModelConfig())) {
-            compactor.compact(session, systemPrompt)
+            compactor.compact(session, effectivePrompt)
                      .ifPresent(usageTracker::recordCompaction);
             // 压缩后消息减少，重新估算以准确记录本轮实际起点
-            estimatedTokens = UsageTracker.estimateInputTokens(systemPrompt, session.getMessages(), tools);
+            estimatedTokens = UsageTracker.estimateInputTokens(effectivePrompt, session.getMessages(), tools);
         }
 
         List<Message> assistantMessages = new ArrayList<>();
@@ -92,7 +111,7 @@ public class Agent {
                 throw new RuntimeException("conversation loop exceeded the maximum number of iterations: " + maxIterations);
             }
 
-            List<AssistantEvent> events = apiClient.stream(ApiRequest.of(systemPrompt, session.getMessages(), tools));
+            List<AssistantEvent> events = apiClient.stream(ApiRequest.of(effectivePrompt, session.getMessages(), tools));
             turnUsage = turnUsage.plus(extractUsage(events));
 
             Message assistantMessage = buildAssistantMessage(events);
@@ -115,6 +134,23 @@ public class Agent {
                 startedAt, finishedAt));
 
         return new TurnSummary(assistantMessages, toolResults, iterations);
+    }
+
+    /**
+     * 每次 turn 动态构建实际使用的 system prompt。
+     * = baseSystemPrompt + 记忆使用指令（如有 MemoryLoader）+ 最新记忆索引（如非空）
+     */
+    private List<String> buildEffectivePrompt() {
+        if (memoryLoader == null) {
+            return systemPrompt;
+        }
+        List<String> effective = new ArrayList<>(systemPrompt);
+        effective.add(MemoryLoader.USAGE_INSTRUCTIONS);
+        String memoryIndex = memoryLoader.load();
+        if (!memoryIndex.isBlank()) {
+            effective.add("## Current Memory Index\n\n" + memoryIndex);
+        }
+        return effective;
     }
 
     private TokenUsage extractUsage(List<AssistantEvent> events) {

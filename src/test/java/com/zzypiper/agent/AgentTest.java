@@ -2,8 +2,9 @@ package com.zzypiper.agent;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zzypiper.api.ApiClient;
 import com.zzypiper.api.mock.MockApiClient;
-import com.zzypiper.api.minimax.MinimaxApiClient;
+import com.zzypiper.boot.AgentBootstrap;
 import com.zzypiper.permission.ModeEnum;
 import com.zzypiper.permission.PermissionPolicy;
 import com.zzypiper.session.ContentBlock;
@@ -15,6 +16,7 @@ import com.zzypiper.tool.ToolRegistry;
 import com.zzypiper.tool.ToolSpec;
 import org.junit.Test;
 
+import java.nio.file.Path;
 import java.util.Arrays;
 
 import static org.junit.Assert.*;
@@ -66,10 +68,7 @@ public class AgentTest {
     public void testMinimaxFullLoop() throws Exception {
         ObjectMapper mapper = new ObjectMapper();
 
-        String apiKey = System.getenv("MINIMAX_API_KEY");
-        org.junit.Assume.assumeNotNull(apiKey);
-
-        MinimaxApiClient client = new MinimaxApiClient(apiKey);
+        ApiClient client = AgentBootstrap.loadApiClient(Path.of("."));
 
         ToolRegistry registry = new ToolRegistry();
         registry.register(
@@ -94,11 +93,11 @@ public class AgentTest {
                 new Session(),
                 client,
                 new PermissionPolicy(ModeEnum.WORKSPACE_WRITE, registry),
-                Arrays.asList("You are a helpful assistant. Use the add tool when asked to add numbers."),
+                Arrays.asList("You are a helpful assistant. You MUST always call the add tool to compute sums; never answer arithmetic questions from memory."),
                 registry
         );
 
-        TurnSummary summary = agent.runTurn("what is 2 + 2?");
+        TurnSummary summary = agent.runTurn("Please use the add tool to compute: what is 2 + 2?");
 
         assertTrue("应至少迭代2次（工具调用 + 最终回复）", summary.getIterations() >= 2);
         assertEquals(1, summary.getToolResults().size());

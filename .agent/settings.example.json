@@ -1,0 +1,8 @@
+{
+  "api": {
+    "provider":  "minimax",
+    "apiKey":    "sk-YOUR_API_KEY_HERE",
+    "model":     "MiniMax-M3",
+    "maxTokens": 4096
+  }
+}

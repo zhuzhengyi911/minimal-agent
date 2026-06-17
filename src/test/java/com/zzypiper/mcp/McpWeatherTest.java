@@ -1,8 +1,8 @@
 package com.zzypiper.mcp;
 
 import com.zzypiper.agent.Agent;
-import com.zzypiper.api.minimax.MinimaxApiClient;
-import com.zzypiper.cli.AgentBootstrap;
+import com.zzypiper.api.ApiClient;
+import com.zzypiper.boot.AgentBootstrap;
 import com.zzypiper.permission.ModeEnum;
 import com.zzypiper.permission.PermissionPolicy;
 import com.zzypiper.session.ContentBlock;
@@ -21,17 +21,14 @@ public class McpWeatherTest {
 
     @Test
     public void testQueryShanghaiWeather() throws Exception {
-        String apiKey = System.getenv("MINIMAX_API_KEY");
-        org.junit.Assume.assumeNotNull("需要设置环境变量 MINIMAX_API_KEY", apiKey);
-
-        // 从 .agent/mcp.json 加载 weather MCP server
+        // 从 .agent/mcp.json 加载 weather MCP server，API key 从 .agent/settings.json 读取
         AgentBootstrap.BuildResult built = AgentBootstrap.build(Path.of("."));
         ToolRegistry registry = built.registry();
 
         assertTrue("mcp__weather__get_weather 工具应已注册",
                 registry.contains("mcp__weather__get_weather"));
 
-        MinimaxApiClient client = new MinimaxApiClient(apiKey);
+        ApiClient client = built.apiClient();
         Agent agent = new Agent(
                 new Session(),
                 client,

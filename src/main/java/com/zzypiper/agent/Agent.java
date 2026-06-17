@@ -4,6 +4,7 @@ import com.zzypiper.api.ApiRequest;
 import com.zzypiper.api.AssistantEvent;
 import com.zzypiper.api.TokenUsage;
 import com.zzypiper.api.TurnUsage;
+import com.zzypiper.api.UsageTracker;
 import com.zzypiper.hook.HookResult;
 import com.zzypiper.hook.HookRunner;
 import com.zzypiper.api.ApiClient;
@@ -18,6 +19,7 @@ import com.zzypiper.tool.ToolException;
 import com.zzypiper.tool.ToolRegistry;
 import lombok.Getter;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -62,66 +64,60 @@ public class Agent {
     }
 
     public TurnSummary runTurn(String userInput) {
+        Instant startedAt = Instant.now();
         session.addMessage(Message.userText(userInput));
+
+        List<com.zzypiper.tool.ToolDefinition> tools = toolRegistry.getDefinitions(permissionPolicy.getMode());
+        int estimatedTokens = UsageTracker.estimateInputTokens(systemPrompt, session.getMessages(), tools);
 
         List<Message> assistantMessages = new ArrayList<>();
         List<Message> toolResults = new ArrayList<>();
-        int iterations = 0;
-
-        List<com.zzypiper.tool.ToolDefinition> effectiveDefinitions =
-                toolRegistry.getDefinitions(permissionPolicy.getMode());
-
-        // 调用前估算 input token 数（含系统提示、消息历史、工具 schema）
-        int estimatedTokens = UsageTracker.estimateInputTokens(
-                systemPrompt, session.getMessages(), effectiveDefinitions);
-
-        // 本 turn 内多次迭代的用量累计
         TokenUsage turnUsage = TokenUsage.ZERO;
+        int iterations = 0;
 
         while (true) {
             iterations++;
-
             if (iterations > maxIterations) {
                 throw new RuntimeException("conversation loop exceeded the maximum number of iterations: " + maxIterations);
             }
 
-            List<AssistantEvent> events = apiClient.stream(
-                    ApiRequest.of(systemPrompt, session.getMessages(), effectiveDefinitions)
-            );
-
-            // 从事件流中提取本次迭代的 token 用量
-            TokenUsage iterUsage = events.stream()
-                    .filter(e -> e instanceof AssistantEvent.Usage)
-                    .map(e -> ((AssistantEvent.Usage) e).usage())
-                    .findFirst()
-                    .orElse(TokenUsage.ZERO);
-            turnUsage = turnUsage.plus(iterUsage);
+            List<AssistantEvent> events = apiClient.stream(ApiRequest.of(systemPrompt, session.getMessages(), tools));
+            turnUsage = turnUsage.plus(extractUsage(events));
 
             Message assistantMessage = buildAssistantMessage(events);
-
-            List<ContentBlock> pendingToolUse = assistantMessage.getBlocks().stream()
-                    .filter(b -> b.getKind() == KindEnum.TOOL_USE)
-                    .collect(Collectors.toList());
-
             session.addMessage(assistantMessage);
             assistantMessages.add(assistantMessage);
 
-            if (pendingToolUse.isEmpty()) {
-                break;
-            }
+            List<ContentBlock> toolUses = pendingToolUses(assistantMessage);
+            if (toolUses.isEmpty()) break;
 
-            for (ContentBlock toolUseBlock : pendingToolUse) {
-                Message resultMessage = processToolUse(toolUseBlock);
-                session.addMessage(resultMessage);
-                toolResults.add(resultMessage);
+            for (ContentBlock toolUse : toolUses) {
+                Message result = processToolUse(toolUse);
+                session.addMessage(result);
+                toolResults.add(result);
             }
         }
 
-        // 记录本 turn 的用量
+        Instant finishedAt = Instant.now();
         usageTracker.record(new TurnUsage(
-                usageTracker.turns().size(), iterations, estimatedTokens, turnUsage));
+                usageTracker.turns().size(), iterations, estimatedTokens, turnUsage,
+                startedAt, finishedAt));
 
         return new TurnSummary(assistantMessages, toolResults, iterations);
+    }
+
+    private TokenUsage extractUsage(List<AssistantEvent> events) {
+        return events.stream()
+                .filter(e -> e instanceof AssistantEvent.Usage)
+                .map(e -> ((AssistantEvent.Usage) e).usage())
+                .findFirst()
+                .orElse(TokenUsage.ZERO);
+    }
+
+    private List<ContentBlock> pendingToolUses(Message message) {
+        return message.getBlocks().stream()
+                .filter(b -> b.getKind() == KindEnum.TOOL_USE)
+                .collect(Collectors.toList());
     }
 
     private Message buildAssistantMessage(List<AssistantEvent> events) {

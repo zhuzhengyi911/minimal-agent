@@ -1,5 +1,8 @@
 package com.zzypiper.api;
 
+import java.time.Duration;
+import java.time.Instant;
+
 /**
  * 单个 turn 的用量汇总。
  *
@@ -10,8 +13,14 @@ public record TurnUsage(
         int        turnIndex,
         int        iterations,             // 本 turn 共调用了几次 API
         int        estimatedInputTokens,   // 调用前估算的 input token 数（字符数 / 4）
-        TokenUsage actual                  // 调用后实际累计用量
+        TokenUsage actual,                 // 调用后实际累计用量
+        Instant    startedAt,
+        Instant    finishedAt
 ) {
+    public Duration duration() {
+        return Duration.between(startedAt, finishedAt);
+    }
+
     public double cost(ModelConfig config) {
         return actual.cost(config);
     }

@@ -8,11 +8,13 @@ import com.zzypiper.mcp.McpManager;
 import com.zzypiper.mcp.McpServerConfig;
 import com.zzypiper.mcp.TransportType;
 import com.zzypiper.memory.MemoryLoader;
+import com.zzypiper.skill.SkillLoader;
 import com.zzypiper.tool.ToolRegistry;
 import com.zzypiper.tool.builtin.BashTool;
 import com.zzypiper.tool.builtin.EditFileTool;
 import com.zzypiper.tool.builtin.GlobTool;
 import com.zzypiper.tool.builtin.GrepTool;
+import com.zzypiper.tool.builtin.LoadSkillTool;
 import com.zzypiper.tool.builtin.ReadFileTool;
 import com.zzypiper.tool.builtin.ReadMemoryTool;
 import com.zzypiper.tool.builtin.WriteFileTool;
@@ -67,15 +69,17 @@ public class AgentBootstrap {
      */
     public static BuildResult build(Path workDir) {
         MemoryLoader memoryLoader = new MemoryLoader(workDir);
+        SkillLoader  skillLoader  = new SkillLoader(workDir);
 
         ToolRegistry registry = new ToolRegistry();
         registerBuiltinTools(registry);
         registerMemoryTools(registry, memoryLoader);
+        registerSkillTools(registry, skillLoader);
 
         McpManager mcpManager = initMcp(registry, workDir);
         ApiClient apiClient = loadApiClient(workDir);
 
-        return new BuildResult(registry, mcpManager, apiClient, memoryLoader);
+        return new BuildResult(registry, mcpManager, apiClient, memoryLoader, skillLoader);
     }
 
     /** 仅构建内置工具注册表（不加载 MCP 和 API 配置），供测试或简单场景使用。 */
@@ -156,6 +160,11 @@ public class AgentBootstrap {
         registry.register(readTool.spec(),  readTool::execute);
     }
 
+    private static void registerSkillTools(ToolRegistry registry, SkillLoader skillLoader) {
+        LoadSkillTool loadTool = new LoadSkillTool(skillLoader);
+        registry.register(loadTool.spec(), loadTool::execute);
+    }
+
     // -------------------------------------------------------------------------
     // MCP 初始化
     // -------------------------------------------------------------------------
@@ -214,9 +223,10 @@ public class AgentBootstrap {
     // -------------------------------------------------------------------------
 
     /**
-     * {@link #build(Path)} 的返回值，持有完整初始化的工具注册表、MCP 管理器、API 客户端和记忆加载器。
+     * {@link #build(Path)} 的返回值，持有完整初始化的工具注册表、MCP 管理器、API 客户端、记忆加载器和 skill 加载器。
      */
-    public record BuildResult(ToolRegistry registry, McpManager mcpManager, ApiClient apiClient, MemoryLoader memoryLoader) {
+    public record BuildResult(ToolRegistry registry, McpManager mcpManager, ApiClient apiClient,
+                              MemoryLoader memoryLoader, SkillLoader skillLoader) {
         /** 释放所有 MCP server 资源。如果没有 MCP，此方法为空操作。 */
         public void shutdown() {
             if (mcpManager != null) {

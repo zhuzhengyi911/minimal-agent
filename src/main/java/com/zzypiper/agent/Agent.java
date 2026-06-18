@@ -8,6 +8,8 @@ import com.zzypiper.api.UsageTracker;
 import com.zzypiper.compaction.Compactor;
 import com.zzypiper.hook.HookResult;
 import com.zzypiper.memory.MemoryLoader;
+import com.zzypiper.skill.SkillLoader;
+import com.zzypiper.skill.SkillSummary;
 import com.zzypiper.api.ApiClient;
 import com.zzypiper.permission.Outcome;
 import com.zzypiper.permission.PermissionPolicy;
@@ -68,16 +70,22 @@ public class Agent {
 
         List<com.zzypiper.tool.ToolDefinition> tools = toolRegistry.getDefinitions(permissionPolicy.getMode());
 
-        // 每个 turn 动态拼装 system prompt：base + 记忆使用指令 + 最新记忆索引
-        List<String> effectivePrompt = buildEffectivePrompt();
+        // 压缩检查用初始 prompt（压缩前 skill 状态）
+        List<String> initialPrompt = buildEffectivePrompt();
 
         // 用当前 session 的估算值实时判断是否需要压缩，比依赖上一轮 actual 更准确
-        int estimatedTokens = UsageTracker.estimateInputTokens(effectivePrompt, session.getMessages(), tools);
+        int estimatedTokens = UsageTracker.estimateInputTokens(initialPrompt, session.getMessages(), tools);
         if (UsageTracker.exceedsThreshold(estimatedTokens, apiClient.getModelConfig())) {
-            compactor.compact(session, effectivePrompt)
-                     .ifPresent(usageTracker::recordCompaction);
+            compactor.compact(session, initialPrompt)
+                     .ifPresent(cu -> {
+                         usageTracker.recordCompaction(cu);
+                         // 压缩后清空所有已加载 skill，回到只有 summaries 的状态
+                         if (options.skillLoader() != null) {
+                             options.skillLoader().unloadAll();
+                         }
+                     });
             // 压缩后消息减少，重新估算以准确记录本轮实际起点
-            estimatedTokens = UsageTracker.estimateInputTokens(effectivePrompt, session.getMessages(), tools);
+            estimatedTokens = UsageTracker.estimateInputTokens(buildEffectivePrompt(), session.getMessages(), tools);
         }
 
         List<Message> assistantMessages = new ArrayList<>();
@@ -91,6 +99,9 @@ public class Agent {
                 throw new RuntimeException("conversation loop exceeded the maximum number of iterations: " + options.maxIterations());
             }
 
+            // 每次迭代重新构建 prompt：load_skill 执行后 loadedSkills 已更新，
+            // 新内容应在下一次 API 调用的 system prompt 里立即生效
+            List<String> effectivePrompt = buildEffectivePrompt();
             List<AssistantEvent> events = apiClient.stream(ApiRequest.of(effectivePrompt, session.getMessages(), tools));
             turnUsage = turnUsage.plus(extractUsage(events));
 
@@ -118,18 +129,45 @@ public class Agent {
 
     /**
      * 每次 turn 动态构建实际使用的 system prompt。
-     * = baseSystemPrompt + 记忆使用指令（如有 MemoryLoader）+ 最新记忆索引（如非空）
+     * = baseSystemPrompt
+     *   + skill 使用指令 + skill summaries + 已加载 skill 完整内容（如有 SkillLoader）
+     *   + 记忆使用指令 + 最新记忆索引（如有 MemoryLoader）
      */
     private List<String> buildEffectivePrompt() {
-        if (options.memoryLoader() == null) {
+        if (options.skillLoader() == null && options.memoryLoader() == null) {
             return systemPrompt;
         }
         List<String> effective = new ArrayList<>(systemPrompt);
-        effective.add(MemoryLoader.USAGE_INSTRUCTIONS);
-        String memoryIndex = options.memoryLoader().load();
-        if (!memoryIndex.isBlank()) {
-            effective.add("## Current Memory Index\n\n" + memoryIndex);
+
+        // Skill 系统
+        if (options.skillLoader() != null) {
+            SkillLoader skillLoader = options.skillLoader();
+            effective.add(SkillLoader.USAGE_INSTRUCTIONS);
+
+            // skill summaries（始终注入）
+            List<SkillSummary> summaries = skillLoader.getSummaries();
+            if (!summaries.isEmpty()) {
+                StringBuilder sb = new StringBuilder("## Available Skills\n\n");
+                for (SkillSummary s : summaries) {
+                    sb.append("- **").append(s.name()).append("**: ").append(s.description()).append("\n");
+                }
+                effective.add(sb.toString());
+            }
+
+            // 已加载 skill 完整内容
+            skillLoader.getLoadedContents().forEach((name, content) ->
+                    effective.add("## Skill: " + name + "\n\n" + content));
         }
+
+        // 记忆系统
+        if (options.memoryLoader() != null) {
+            effective.add(MemoryLoader.USAGE_INSTRUCTIONS);
+            String memoryIndex = options.memoryLoader().load();
+            if (!memoryIndex.isBlank()) {
+                effective.add("## Current Memory Index\n\n" + memoryIndex);
+            }
+        }
+
         return effective;
     }
 

@@ -40,7 +40,8 @@ public class MemoryToolTest {
         AgentOptions options = new AgentOptions(
                 Integer.MAX_VALUE,
                 new HookRunner(List.of(), List.of()),
-                memoryLoader
+                memoryLoader,
+                null
         );
         return new Agent(
                 new Session(),

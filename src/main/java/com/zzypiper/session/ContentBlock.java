@@ -30,7 +30,7 @@ public class ContentBlock {
 
     public static ContentBlock toolResult(String toolUseId, String toolName, String toolOutput, boolean error) {
         return new ContentBlock(
-                KindEnum.TOOL_USE, null,
+                KindEnum.TOOL_RESULT, null,
                 toolUseId, toolName, null,
                 toolOutput, error
         );

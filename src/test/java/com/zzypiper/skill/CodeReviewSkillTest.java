@@ -1,14 +1,9 @@
 package com.zzypiper.skill;
 
 import com.zzypiper.agent.Agent;
-import com.zzypiper.agent.AgentOptions;
 import com.zzypiper.boot.AgentBootstrap;
-import com.zzypiper.hook.HookRunner;
-import com.zzypiper.permission.ModeEnum;
-import com.zzypiper.permission.PermissionPolicy;
 import com.zzypiper.session.ContentBlock;
 import com.zzypiper.session.KindEnum;
-import com.zzypiper.session.Session;
 import com.zzypiper.session.TurnSummary;
 import org.junit.Test;
 
@@ -94,25 +89,7 @@ public class CodeReviewSkillTest {
         assertTrue("应包含 code_review/java skill",
                 summaries.stream().anyMatch(s -> s.name().equals("code_review/java")));
 
-        AgentOptions options = new AgentOptions(
-                10,
-                new HookRunner(List.of(), List.of()),
-                null,
-                skillLoader,
-                null
-        );
-
-        Agent agent = new Agent(
-                new Session(),
-                built.apiClient(),
-                new PermissionPolicy(ModeEnum.READ_ONLY, built.registry()),
-                List.of("You are a senior software engineer performing code reviews. " +
-                        "Always use available skills to guide your review. " +
-                        "You MUST call load_skill(\"code_review\") first, then load_skill(\"code_review/java\"), " +
-                        "before writing your final review report."),
-                built.registry(),
-                options
-        );
+        Agent agent = built.buildAgent();
 
         String userMessage = "Please review the following Java code and produce a detailed report:\n\n"
                 + "```java\n" + FLAWED_CODE + "```";

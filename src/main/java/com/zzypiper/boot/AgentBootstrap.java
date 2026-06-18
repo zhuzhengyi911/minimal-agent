@@ -2,13 +2,19 @@ package com.zzypiper.boot;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zzypiper.agent.Agent;
+import com.zzypiper.agent.AgentOptions;
+import com.zzypiper.agentmd.AgentMdLoader;
 import com.zzypiper.api.ApiClient;
 import com.zzypiper.api.minimax.MinimaxApiClient;
+import com.zzypiper.hook.HookRunner;
 import com.zzypiper.mcp.McpManager;
 import com.zzypiper.mcp.McpServerConfig;
 import com.zzypiper.mcp.TransportType;
-import com.zzypiper.agentmd.AgentMdLoader;
 import com.zzypiper.memory.MemoryLoader;
+import com.zzypiper.permission.ModeEnum;
+import com.zzypiper.permission.PermissionPolicy;
+import com.zzypiper.session.Session;
 import com.zzypiper.skill.SkillLoader;
 import com.zzypiper.tool.ToolRegistry;
 import com.zzypiper.tool.builtin.BashTool;
@@ -234,6 +240,28 @@ public class AgentBootstrap {
         /** 返回默认 system prompt 列表，供 CLI 创建 Agent 时使用。 */
         public List<String> defaultSystemPrompt() {
             return List.of(Defaults.DEFAULT_SYSTEM_PROMPT);
+        }
+
+        /**
+         * 使用默认配置创建一个完整的 Agent。
+         * system prompt 使用 {@link Defaults#DEFAULT_SYSTEM_PROMPT}，权限为 WORKSPACE_WRITE。
+         */
+        public Agent buildAgent() {
+            AgentOptions options = new AgentOptions(
+                    Integer.MAX_VALUE,
+                    new HookRunner(List.of(), List.of()),
+                    memoryLoader,
+                    skillLoader,
+                    agentMdLoader
+            );
+            return new Agent(
+                    new Session(),
+                    apiClient,
+                    new PermissionPolicy(ModeEnum.WORKSPACE_WRITE, registry),
+                    defaultSystemPrompt(),
+                    registry,
+                    options
+            );
         }
 
         /** 释放所有 MCP server 资源。如果没有 MCP，此方法为空操作。 */

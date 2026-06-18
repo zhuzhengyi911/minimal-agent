@@ -98,7 +98,8 @@ public class CodeReviewSkillTest {
                 10,
                 new HookRunner(List.of(), List.of()),
                 null,
-                skillLoader
+                skillLoader,
+                null
         );
 
         Agent agent = new Agent(

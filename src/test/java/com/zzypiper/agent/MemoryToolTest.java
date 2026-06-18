@@ -41,6 +41,7 @@ public class MemoryToolTest {
                 Integer.MAX_VALUE,
                 new HookRunner(List.of(), List.of()),
                 memoryLoader,
+                null,
                 null
         );
         return new Agent(

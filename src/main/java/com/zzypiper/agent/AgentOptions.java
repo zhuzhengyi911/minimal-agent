@@ -1,5 +1,6 @@
 package com.zzypiper.agent;
 
+import com.zzypiper.agentmd.AgentMdLoader;
 import com.zzypiper.hook.HookRunner;
 import com.zzypiper.memory.MemoryLoader;
 import com.zzypiper.skill.SkillLoader;
@@ -13,16 +14,18 @@ import java.util.Arrays;
  * 需要定制时通过构造器传入具体值。
  */
 public record AgentOptions(
-        int          maxIterations,
-        HookRunner   hookRunner,
-        MemoryLoader memoryLoader,
-        SkillLoader  skillLoader
+        int           maxIterations,
+        HookRunner    hookRunner,
+        MemoryLoader  memoryLoader,
+        SkillLoader   skillLoader,
+        AgentMdLoader agentMdLoader
 ) {
-    /** 默认配置：无迭代上限、空 Hook、无记忆加载器、无 skill 加载器。 */
+    /** 默认配置：无迭代上限、空 Hook、无记忆加载器、无 skill 加载器、无 AGENT.md 加载器。 */
     public static AgentOptions defaults() {
         return new AgentOptions(
                 Integer.MAX_VALUE,
                 new HookRunner(Arrays.asList(), Arrays.asList()),
+                null,
                 null,
                 null
         );

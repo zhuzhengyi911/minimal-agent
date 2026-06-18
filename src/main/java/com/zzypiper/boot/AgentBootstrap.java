@@ -7,6 +7,7 @@ import com.zzypiper.api.minimax.MinimaxApiClient;
 import com.zzypiper.mcp.McpManager;
 import com.zzypiper.mcp.McpServerConfig;
 import com.zzypiper.mcp.TransportType;
+import com.zzypiper.agentmd.AgentMdLoader;
 import com.zzypiper.memory.MemoryLoader;
 import com.zzypiper.skill.SkillLoader;
 import com.zzypiper.tool.ToolRegistry;
@@ -68,8 +69,9 @@ public class AgentBootstrap {
      * 完整启动：读取配置、创建 ApiClient、注册工具、初始化 MCP。
      */
     public static BuildResult build(Path workDir) {
-        MemoryLoader memoryLoader = new MemoryLoader(workDir);
-        SkillLoader  skillLoader  = new SkillLoader(workDir);
+        MemoryLoader  memoryLoader  = new MemoryLoader(workDir);
+        SkillLoader   skillLoader   = new SkillLoader(workDir);
+        AgentMdLoader agentMdLoader = new AgentMdLoader(workDir);
 
         ToolRegistry registry = new ToolRegistry();
         registerBuiltinTools(registry);
@@ -79,7 +81,7 @@ public class AgentBootstrap {
         McpManager mcpManager = initMcp(registry, workDir);
         ApiClient apiClient = loadApiClient(workDir);
 
-        return new BuildResult(registry, mcpManager, apiClient, memoryLoader, skillLoader);
+        return new BuildResult(registry, mcpManager, apiClient, memoryLoader, skillLoader, agentMdLoader);
     }
 
     /** 仅构建内置工具注册表（不加载 MCP 和 API 配置），供测试或简单场景使用。 */
@@ -223,10 +225,12 @@ public class AgentBootstrap {
     // -------------------------------------------------------------------------
 
     /**
-     * {@link #build(Path)} 的返回值，持有完整初始化的工具注册表、MCP 管理器、API 客户端、记忆加载器和 skill 加载器。
+     * {@link #build(Path)} 的返回值，持有完整初始化的工具注册表、MCP 管理器、
+     * API 客户端、记忆加载器、skill 加载器和 AGENT.md 加载器。
      */
     public record BuildResult(ToolRegistry registry, McpManager mcpManager, ApiClient apiClient,
-                              MemoryLoader memoryLoader, SkillLoader skillLoader) {
+                              MemoryLoader memoryLoader, SkillLoader skillLoader,
+                              AgentMdLoader agentMdLoader) {
         /** 释放所有 MCP server 资源。如果没有 MCP，此方法为空操作。 */
         public void shutdown() {
             if (mcpManager != null) {

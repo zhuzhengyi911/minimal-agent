@@ -7,6 +7,7 @@ import com.zzypiper.api.TurnUsage;
 import com.zzypiper.api.UsageTracker;
 import com.zzypiper.compaction.Compactor;
 import com.zzypiper.hook.HookResult;
+import com.zzypiper.agentmd.AgentMdLoader;
 import com.zzypiper.memory.MemoryLoader;
 import com.zzypiper.skill.SkillLoader;
 import com.zzypiper.skill.SkillSummary;
@@ -128,16 +129,24 @@ public class Agent {
     }
 
     /**
-     * 每次 turn 动态构建实际使用的 system prompt。
-     * = baseSystemPrompt
+     * 每次迭代动态构建实际使用的 system prompt。
+     * = AGENT.md 内容（全局 + 项目，最前面）
+     *   + baseSystemPrompt
      *   + skill 使用指令 + skill summaries + 已加载 skill 完整内容（如有 SkillLoader）
      *   + 记忆使用指令 + 最新记忆索引（如有 MemoryLoader）
      */
     private List<String> buildEffectivePrompt() {
-        if (options.skillLoader() == null && options.memoryLoader() == null) {
-            return systemPrompt;
+        List<String> effective = new ArrayList<>();
+
+        // AGENT.md：项目上下文，注入最前面
+        if (options.agentMdLoader() != null) {
+            String agentMd = options.agentMdLoader().load();
+            if (!agentMd.isBlank()) {
+                effective.add(agentMd);
+            }
         }
-        List<String> effective = new ArrayList<>(systemPrompt);
+
+        effective.addAll(systemPrompt);
 
         // Skill 系统
         if (options.skillLoader() != null) {

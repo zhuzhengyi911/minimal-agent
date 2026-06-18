@@ -231,6 +231,11 @@ public class AgentBootstrap {
     public record BuildResult(ToolRegistry registry, McpManager mcpManager, ApiClient apiClient,
                               MemoryLoader memoryLoader, SkillLoader skillLoader,
                               AgentMdLoader agentMdLoader) {
+        /** 返回默认 system prompt 列表，供 CLI 创建 Agent 时使用。 */
+        public List<String> defaultSystemPrompt() {
+            return List.of(Defaults.DEFAULT_SYSTEM_PROMPT);
+        }
+
         /** 释放所有 MCP server 资源。如果没有 MCP，此方法为空操作。 */
         public void shutdown() {
             if (mcpManager != null) {

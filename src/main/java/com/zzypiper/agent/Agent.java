@@ -138,15 +138,16 @@ public class Agent {
     private List<String> buildEffectivePrompt() {
         List<String> effective = new ArrayList<>();
 
-        // AGENT.md：项目上下文，注入最前面
+        // 默认角色定义在最前面
+        effective.addAll(systemPrompt);
+
+        // AGENT.md：项目上下文，在 systemPrompt 之后，可补充或覆盖默认行为
         if (options.agentMdLoader() != null) {
             String agentMd = options.agentMdLoader().load();
             if (!agentMd.isBlank()) {
                 effective.add(agentMd);
             }
         }
-
-        effective.addAll(systemPrompt);
 
         // Skill 系统
         if (options.skillLoader() != null) {

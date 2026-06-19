@@ -47,7 +47,8 @@ public class WriteMemoryTool implements BuiltinTool {
                 "\"description\":{\"type\":\"string\",\"description\":\"One-line summary shown in the memory index (under 150 chars)\"}," +
                 "\"content\":{\"type\":\"string\",\"description\":\"Full memory content in Markdown\"}}" +
                 ",\"required\":[\"name\",\"type\",\"description\",\"content\"]}",
-                ModeEnum.WORKSPACE_WRITE
+                ModeEnum.WORKSPACE_WRITE,
+                false
         );
     }
 

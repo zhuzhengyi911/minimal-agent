@@ -22,7 +22,8 @@ public class WriteFileTool implements BuiltinTool {
                 "\"path\":{\"type\":\"string\"}," +
                 "\"content\":{\"type\":\"string\"}}" +
                 ",\"required\":[\"path\",\"content\"]}",
-                ModeEnum.WORKSPACE_WRITE
+                ModeEnum.WORKSPACE_WRITE,
+                false
         );
     }
 

@@ -23,7 +23,8 @@ public class EditFileTool implements BuiltinTool {
                 "\"old_string\":{\"type\":\"string\"}," +
                 "\"new_string\":{\"type\":\"string\"}}" +
                 ",\"required\":[\"path\",\"old_string\",\"new_string\"]}",
-                ModeEnum.WORKSPACE_WRITE
+                ModeEnum.WORKSPACE_WRITE,
+                false
         );
     }
 

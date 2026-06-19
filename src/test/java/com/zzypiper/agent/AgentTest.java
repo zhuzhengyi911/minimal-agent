@@ -32,7 +32,7 @@ public class AgentTest {
 
         ToolRegistry registry = new ToolRegistry();
         registry.register(
-                new ToolSpec("add", "Add numbers", "{\"type\":\"object\",\"properties\":{}}", ModeEnum.WORKSPACE_WRITE),
+                new ToolSpec("add", "Add numbers", "{\"type\":\"object\",\"properties\":{}}", ModeEnum.WORKSPACE_WRITE, false),
                 input -> {
                     int sum = Arrays.stream(input.split(","))
                             .mapToInt(Integer::parseInt)
@@ -76,7 +76,8 @@ public class AgentTest {
                         "add",
                         "Add two integers and return the sum.",
                         "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"integer\"},\"b\":{\"type\":\"integer\"}},\"required\":[\"a\",\"b\"]}",
-                        ModeEnum.WORKSPACE_WRITE
+                        ModeEnum.WORKSPACE_WRITE,
+                        false
                 ),
                 input -> {
                     try {

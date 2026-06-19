@@ -50,8 +50,8 @@ public class MemoryLoader {
     private final Path indexPath;
     private final Path memoryDir;
 
-    private String cachedContent = null;
-    private long   cachedMtime   = -1L;
+    private volatile String cachedContent = null;
+    private volatile long   cachedMtime   = -1L;
 
     public MemoryLoader(Path workDir) {
         this.memoryDir = workDir.resolve(MEMORY_DIR);

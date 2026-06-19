@@ -15,10 +15,14 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *     "apiKey":    "sk-...",
  *     "model":     "MiniMax-M3",
  *     "maxTokens": 4096
+ *   },
+ *   "coordinator": {
+ *     "enabled": true
  *   }
  * }
  * }</pre>
  */
 public record AgentSettings(
-        @JsonProperty("api") ApiConfig api
+        @JsonProperty("api")         ApiConfig         api,
+        @JsonProperty("coordinator") CoordinatorConfig coordinator
 ) {}

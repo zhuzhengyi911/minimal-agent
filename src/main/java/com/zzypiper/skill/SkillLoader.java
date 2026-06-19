@@ -7,9 +7,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 import java.util.stream.Stream;
 
@@ -62,8 +62,8 @@ public class SkillLoader {
     /** 所有 skill 的元数据（name + description），启动时扫描，静态不变。 */
     private final List<SkillSummary> summaries;
 
-    /** name → 完整内容，运行时按需填充。使用 LinkedHashMap 保证注入顺序一致。 */
-    private final Map<String, String> loadedSkills = new LinkedHashMap<>();
+    /** name → 完整内容，运行时按需填充。使用 ConcurrentHashMap 支持并发工具调用。 */
+    private final Map<String, String> loadedSkills = new ConcurrentHashMap<>();
 
     public SkillLoader(Path workDir) {
         this.skillsDir = workDir.resolve(SKILLS_DIR);
@@ -100,9 +100,10 @@ public class SkillLoader {
      * @throws ToolException 若 skill 不存在
      */
     public String loadSkill(String name) throws ToolException {
-        // 已加载则直接返回缓存
-        if (loadedSkills.containsKey(name)) {
-            return loadedSkills.get(name);
+        // 已加载则直接返回缓存（ConcurrentHashMap get 无锁）
+        String cached = loadedSkills.get(name);
+        if (cached != null) {
+            return cached;
         }
 
         SkillSummary summary = findByName(name);
@@ -112,9 +113,10 @@ public class SkillLoader {
 
         try {
             String content = Files.readString(summary.path());
-            loadedSkills.put(name, content);
+            // putIfAbsent：两个线程并发加载同一 skill 时，只有一个能写入，另一个读已有值
+            String existing = loadedSkills.putIfAbsent(name, content);
             LOG.fine("Loaded skill: " + name);
-            return content;
+            return existing != null ? existing : content;
         } catch (IOException e) {
             throw new ToolException("load_skill: failed to read skill '" + name + "': " + e.getMessage());
         }

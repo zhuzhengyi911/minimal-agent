@@ -25,7 +25,8 @@ public class BashTool implements BuiltinTool {
                 "\"command\":{\"type\":\"string\",\"description\":\"The shell command to run\"}," +
                 "\"timeout_ms\":{\"type\":\"integer\",\"description\":\"Timeout in milliseconds (default 30000)\"}}" +
                 ",\"required\":[\"command\"]}",
-                ModeEnum.DANGER_FULL_ACCESS
+                ModeEnum.DANGER_FULL_ACCESS,
+                false
         );
     }
 

@@ -32,7 +32,8 @@ public class GrepTool implements BuiltinTool {
                 "\"glob\":{\"type\":\"string\",\"description\":\"File pattern filter, e.g. *.java\"}," +
                 "\"case_insensitive\":{\"type\":\"boolean\",\"description\":\"Case insensitive search (default false)\"}}" +
                 ",\"required\":[\"pattern\"]}",
-                ModeEnum.READ_ONLY
+                ModeEnum.READ_ONLY,
+                true
         );
     }
 

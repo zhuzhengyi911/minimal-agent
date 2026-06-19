@@ -24,6 +24,7 @@ import com.zzypiper.tool.builtin.GrepTool;
 import com.zzypiper.tool.builtin.LoadSkillTool;
 import com.zzypiper.tool.builtin.ReadFileTool;
 import com.zzypiper.tool.builtin.ReadMemoryTool;
+import com.zzypiper.tool.builtin.SubAgentTool;
 import com.zzypiper.tool.builtin.WriteFileTool;
 import com.zzypiper.tool.builtin.WriteMemoryTool;
 
@@ -33,6 +34,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.logging.Logger;
 
 /**
@@ -75,6 +78,8 @@ public class AgentBootstrap {
      * 完整启动：读取配置、创建 ApiClient、注册工具、初始化 MCP。
      */
     public static BuildResult build(Path workDir) {
+        AgentSettings settings = loadSettings(workDir);
+
         MemoryLoader  memoryLoader  = new MemoryLoader(workDir);
         SkillLoader   skillLoader   = new SkillLoader(workDir);
         AgentMdLoader agentMdLoader = new AgentMdLoader(workDir);
@@ -85,9 +90,17 @@ public class AgentBootstrap {
         registerSkillTools(registry, skillLoader);
 
         McpManager mcpManager = initMcp(registry, workDir);
-        ApiClient apiClient = loadApiClient(workDir);
+        ApiClient apiClient = createApiClient(settings.api());
 
-        return new BuildResult(registry, mcpManager, apiClient, memoryLoader, skillLoader, agentMdLoader);
+        ExecutorService executor = Executors.newCachedThreadPool();
+
+        CoordinatorConfig coordinatorConfig = settings.coordinator() != null
+                ? settings.coordinator()
+                : CoordinatorConfig.defaultConfig();
+
+        return new BuildResult(registry, mcpManager, apiClient,
+                memoryLoader, skillLoader, agentMdLoader,
+                executor, coordinatorConfig);
     }
 
     /** 仅构建内置工具注册表（不加载 MCP 和 API 配置），供测试或简单场景使用。 */
@@ -125,7 +138,10 @@ public class AgentBootstrap {
         }
 
         // 回退：从环境变量构建最小配置
-        return new AgentSettings(new ApiConfig("minimax", null, "MiniMax-M3", 4096));
+        return new AgentSettings(
+                new ApiConfig("minimax", null, "MiniMax-M3", 4096),
+                CoordinatorConfig.defaultConfig()
+        );
     }
 
     private static ApiClient createApiClient(ApiConfig config) {
@@ -232,19 +248,21 @@ public class AgentBootstrap {
 
     /**
      * {@link #build(Path)} 的返回值，持有完整初始化的工具注册表、MCP 管理器、
-     * API 客户端、记忆加载器、skill 加载器和 AGENT.md 加载器。
+     * API 客户端、记忆加载器、skill 加载器、AGENT.md 加载器、线程池和 coordinator 配置。
      */
     public record BuildResult(ToolRegistry registry, McpManager mcpManager, ApiClient apiClient,
                               MemoryLoader memoryLoader, SkillLoader skillLoader,
-                              AgentMdLoader agentMdLoader) {
-        /** 返回默认 system prompt 列表，供 CLI 创建 Agent 时使用。 */
+                              AgentMdLoader agentMdLoader,
+                              ExecutorService executor, CoordinatorConfig coordinatorConfig) {
+
+        /** 返回默认 system prompt 列表（仅含 DEFAULT_SYSTEM_PROMPT）。 */
         public List<String> defaultSystemPrompt() {
             return List.of(Defaults.DEFAULT_SYSTEM_PROMPT);
         }
 
         /**
          * 使用默认配置创建一个完整的 Agent。
-         * system prompt 使用 {@link Defaults#DEFAULT_SYSTEM_PROMPT}，权限为 WORKSPACE_WRITE。
+         * <p>若 coordinator 模式已启用，则注册 SubAgentTool 并追加 Coordinator System Prompt。
          */
         public Agent buildAgent() {
             AgentOptions options = new AgentOptions(
@@ -252,23 +270,36 @@ public class AgentBootstrap {
                     new HookRunner(List.of(), List.of()),
                     memoryLoader,
                     skillLoader,
-                    agentMdLoader
+                    agentMdLoader,
+                    executor
             );
+
+            List<String> systemPrompt = new ArrayList<>(defaultSystemPrompt());
+
+            if (coordinatorConfig.enabled()) {
+                // 注册 SubAgentTool（持有父 registry 引用，执行时创建过滤子 registry）
+                SubAgentTool subAgentTool = new SubAgentTool(apiClient, registry, options);
+                registry.register(subAgentTool.spec(), subAgentTool::execute);
+                systemPrompt.add(Defaults.COORDINATOR_SYSTEM_PROMPT);
+                LOG.fine("Coordinator mode enabled: SubAgentTool registered.");
+            }
+
             return new Agent(
                     new Session(),
                     apiClient,
                     new PermissionPolicy(ModeEnum.WORKSPACE_WRITE, registry),
-                    defaultSystemPrompt(),
+                    systemPrompt,
                     registry,
                     options
             );
         }
 
-        /** 释放所有 MCP server 资源。如果没有 MCP，此方法为空操作。 */
+        /** 释放所有资源（MCP server + 线程池）。 */
         public void shutdown() {
             if (mcpManager != null) {
                 mcpManager.shutdown();
             }
+            executor.shutdown();
         }
     }
 }

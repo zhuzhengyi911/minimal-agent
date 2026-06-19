@@ -36,7 +36,8 @@ public class ReadMemoryTool implements BuiltinTool {
                 "{\"type\":\"object\",\"properties\":{" +
                 "\"filename\":{\"type\":\"string\",\"description\":\"Memory file name as shown in the index, e.g. user_role.md\"}}" +
                 ",\"required\":[\"filename\"]}",
-                ModeEnum.READ_ONLY
+                ModeEnum.READ_ONLY,
+                true
         );
     }
 

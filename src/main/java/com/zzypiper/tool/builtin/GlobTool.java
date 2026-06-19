@@ -27,7 +27,8 @@ public class GlobTool implements BuiltinTool {
                 "\"pattern\":{\"type\":\"string\",\"description\":\"Glob pattern, e.g. **/*.java\"}," +
                 "\"path\":{\"type\":\"string\",\"description\":\"Base directory to search (default: working directory)\"}}" +
                 ",\"required\":[\"pattern\"]}",
-                ModeEnum.READ_ONLY
+                ModeEnum.READ_ONLY,
+                true
         );
     }
 

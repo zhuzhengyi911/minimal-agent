@@ -13,6 +13,8 @@ import com.zzypiper.tool.builtin.ReadMemoryTool;
 import com.zzypiper.tool.builtin.WriteMemoryTool;
 import org.junit.Rule;
 import org.junit.Test;
+
+import java.util.concurrent.Executors;
 import org.junit.rules.TemporaryFolder;
 
 import java.nio.file.Files;
@@ -42,7 +44,8 @@ public class MemoryToolTest {
                 new HookRunner(List.of(), List.of()),
                 memoryLoader,
                 null,
-                null
+                null,
+                Executors.newCachedThreadPool()
         );
         return new Agent(
                 new Session(),

@@ -60,7 +60,8 @@ public class McpManager {
                     qualifiedName,
                     "[MCP:" + config.name() + "] " + tool.description(),
                     tool.inputSchemaJson(),
-                    ModeEnum.WORKSPACE_WRITE
+                    ModeEnum.WORKSPACE_WRITE,
+                    false  // MCP 工具能力未知，保守默认串行
             );
             registry.register(spec, input -> client.callTool(tool.name(), input));
             LOG.info("Registered MCP tool: " + qualifiedName);

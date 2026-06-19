@@ -25,6 +25,7 @@ import lombok.Getter;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -113,10 +114,14 @@ public class Agent {
             List<ContentBlock> toolUses = pendingToolUses(assistantMessage);
             if (toolUses.isEmpty()) break;
 
-            for (ContentBlock toolUse : toolUses) {
-                Message result = processToolUse(toolUse);
-                session.addMessage(result);
-                toolResults.add(result);
+            for (List<ContentBlock> batch : partitionIntoBatches(toolUses)) {
+                List<Message> batchResults = batch.size() > 1
+                        ? runParallel(batch)
+                        : List.of(processToolUse(batch.get(0)));
+                batchResults.forEach(r -> {
+                    session.addMessage(r);
+                    toolResults.add(r);
+                });
             }
         }
 
@@ -193,6 +198,69 @@ public class Agent {
         return message.getBlocks().stream()
                 .filter(b -> b.getKind() == KindEnum.TOOL_USE)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 将 tool_use 列表按 isConcurrencySafe 分批：连续的只读工具合并为一个并行批次，
+     * 写操作（isConcurrencySafe=false）独占一个串行批次。
+     */
+    private List<List<ContentBlock>> partitionIntoBatches(List<ContentBlock> toolUses) {
+        List<List<ContentBlock>> batches = new ArrayList<>();
+        for (ContentBlock toolUse : toolUses) {
+            boolean safe = isConcurrencySafe(toolUse.getToolName());
+            if (safe && !batches.isEmpty() && isConcurrentBatch(batches.get(batches.size() - 1))) {
+                batches.get(batches.size() - 1).add(toolUse);
+            } else {
+                List<ContentBlock> batch = new ArrayList<>();
+                batch.add(toolUse);
+                batches.add(batch);
+            }
+        }
+        return batches;
+    }
+
+    /** 判断一个批次是否为并发批次（批次内第一个工具是 concurrencySafe 的则整批都是）。 */
+    private boolean isConcurrentBatch(List<ContentBlock> batch) {
+        return !batch.isEmpty() && isConcurrencySafe(batch.get(0).getToolName());
+    }
+
+    /** 从 ToolRegistry 查找该工具的 isConcurrencySafe 标记，未知工具返回 false。 */
+    private boolean isConcurrencySafe(String toolName) {
+        com.zzypiper.tool.ToolSpec spec = toolRegistry.getSpec(toolName);
+        return spec != null && spec.isConcurrencySafe();
+    }
+
+    /**
+     * 并行执行一个工具批次，结果顺序与输入一致。
+     * 每个工具在独立虚拟线程中运行；异常被捕获并包装为 error tool result，不中断其他工具。
+     */
+    private List<Message> runParallel(List<ContentBlock> batch) {
+        Message[] results = new Message[batch.size()];
+        List<java.util.concurrent.Future<?>> futures = new ArrayList<>();
+        for (int i = 0; i < batch.size(); i++) {
+            final int idx = i;
+            final ContentBlock toolUse = batch.get(i);
+            futures.add(options.executor().submit(() -> {
+                try {
+                    results[idx] = processToolUse(toolUse);
+                } catch (Exception e) {
+                    results[idx] = Message.toolResult(
+                            toolUse.getToolUseId(), toolUse.getToolName(),
+                            "Unexpected error in parallel execution: " + e.getMessage(), true);
+                }
+            }));
+        }
+        for (java.util.concurrent.Future<?> f : futures) {
+            try {
+                f.get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("Interrupted while waiting for parallel tool batch", e);
+            } catch (java.util.concurrent.ExecutionException e) {
+                throw new RuntimeException("Unexpected error in parallel tool batch", e.getCause());
+            }
+        }
+        return Arrays.asList(results);
     }
 
     private Message buildAssistantMessage(List<AssistantEvent> events) {

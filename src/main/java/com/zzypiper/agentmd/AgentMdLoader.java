@@ -32,10 +32,10 @@ public class AgentMdLoader {
 
     private final Path projectPath;
 
-    private String globalCache   = null;
-    private long   globalMtime   = -1L;
-    private String projectCache  = null;
-    private long   projectMtime  = -1L;
+    private volatile String globalCache   = null;
+    private volatile long   globalMtime   = -1L;
+    private volatile String projectCache  = null;
+    private volatile long   projectMtime  = -1L;
 
     public AgentMdLoader(Path workDir) {
         this.projectPath = workDir.resolve(FILE_NAME);

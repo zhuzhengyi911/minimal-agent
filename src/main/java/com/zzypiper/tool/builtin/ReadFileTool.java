@@ -25,7 +25,8 @@ public class ReadFileTool implements BuiltinTool {
                 "\"offset\":{\"type\":\"integer\",\"description\":\"Start line, 0-based\"}," +
                 "\"limit\":{\"type\":\"integer\",\"description\":\"Max lines to read\"}}" +
                 ",\"required\":[\"path\"]}",
-                ModeEnum.READ_ONLY
+                ModeEnum.READ_ONLY,
+                true
         );
     }
 

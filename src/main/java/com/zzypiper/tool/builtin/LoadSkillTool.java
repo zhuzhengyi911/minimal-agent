@@ -33,7 +33,8 @@ public class LoadSkillTool implements BuiltinTool {
                 "\"name\":{\"type\":\"string\",\"description\":" +
                 "\"Skill name as shown in the index, e.g. code_review or frontend/react\"}}" +
                 ",\"required\":[\"name\"]}",
-                ModeEnum.READ_ONLY
+                ModeEnum.READ_ONLY,
+                true
         );
     }
 

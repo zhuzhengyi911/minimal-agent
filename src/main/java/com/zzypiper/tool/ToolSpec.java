@@ -50,7 +50,15 @@ public record ToolSpec(
          * <p>此字段仅供运行时权限校验使用，<strong>不会发送给 LLM</strong>。
          * 未知工具默认应要求 {@link ModeEnum#DANGER_FULL_ACCESS}（安全兜底原则）。
          */
-        ModeEnum requiredMode
+        ModeEnum requiredMode,
+
+        /**
+         * 该工具是否可与其他工具并发执行。
+         * <p>{@code true}：纯只读操作，无副作用，可安全并行（如 read_file、grep）。
+         * {@code false}：有写操作或副作用，必须串行执行（如 bash、write_file）。
+         * MCP 工具能力未知，默认 {@code false}。
+         */
+        boolean isConcurrencySafe
 ) {
     /**
      * 将 ToolSpec 裁剪为 {@link ToolDefinition}，用于填入 {@link com.zzypiper.api.ApiRequest#getTools()}

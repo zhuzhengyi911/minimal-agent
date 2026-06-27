@@ -43,6 +43,14 @@ public class UsageTracker {
         cumulative = cumulative.plus(turn.actual());
     }
 
+    /** 清空所有统计数据（用于 /clear 命令）。 */
+    public void reset() {
+        turns.clear();
+        compactions.clear();
+        cumulative = TokenUsage.ZERO;
+        compactionOverhead = TokenUsage.ZERO;
+    }
+
     public void recordCompaction(CompactionUsage cu) {
         compactions.add(cu);
         compactionOverhead = compactionOverhead.plus(cu.actual());

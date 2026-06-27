@@ -4,7 +4,7 @@ import com.zzypiper.tool.ToolRegistry;
 import com.zzypiper.tool.ToolSpec;
 
 public class PermissionPolicy {
-    private final ModeEnum mode;
+    private ModeEnum mode;
     private final ToolRegistry registry;  // nullable — may be null for legacy usage
 
     public PermissionPolicy(ModeEnum mode) {
@@ -22,6 +22,11 @@ public class PermissionPolicy {
 
     public ModeEnum getMode() {
         return mode;
+    }
+
+    /** 运行时切换权限模式（用于 /mode 命令）。 */
+    public void setMode(ModeEnum mode) {
+        this.mode = mode;
     }
 
     public Outcome authorize(String toolName, String input) {

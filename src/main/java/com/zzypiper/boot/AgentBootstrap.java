@@ -100,7 +100,7 @@ public class AgentBootstrap {
 
         return new BuildResult(registry, mcpManager, apiClient,
                 memoryLoader, skillLoader, agentMdLoader,
-                executor, coordinatorConfig);
+                executor, coordinatorConfig, settings);
     }
 
     /** 仅构建内置工具注册表（不加载 MCP 和 API 配置），供测试或简单场景使用。 */
@@ -253,7 +253,8 @@ public class AgentBootstrap {
     public record BuildResult(ToolRegistry registry, McpManager mcpManager, ApiClient apiClient,
                               MemoryLoader memoryLoader, SkillLoader skillLoader,
                               AgentMdLoader agentMdLoader,
-                              ExecutorService executor, CoordinatorConfig coordinatorConfig) {
+                              ExecutorService executor, CoordinatorConfig coordinatorConfig,
+                              AgentSettings settings) {
 
         /** 返回默认 system prompt 列表（仅含 DEFAULT_SYSTEM_PROMPT）。 */
         public List<String> defaultSystemPrompt() {
